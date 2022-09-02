@@ -1,0 +1,1797 @@
+extensions[csv]
+
+; global variables
+globals[
+ ; 3D object
+  vertices
+  vertices-n
+  vertices-t
+  vertices-color
+  faces
+  faces-vn
+  faces-vt
+
+  ; world size
+  min_x max_x
+  min_y max_y
+  min_z max_z
+
+  ; running variables
+  current-agent
+  current-model-path
+]
+
+turtles-own[
+  vid ; vertice id starting from 0
+  object; agent type, for the loaded model, its value is 'model'
+]
+
+links-own[
+ fid
+]
+
+to setup
+
+  clear-all
+  reset-ticks
+  ; set current-model-path "models/teapot.off"
+  ; set input-selected-path current-model-path
+
+  ; load-model-male
+
+end
+
+; select a model file from your file system
+to select-model
+  let selected-file user-file
+  if selected-file != false [
+    set current-model-path selected-file
+    set input-selected-path current-model-path
+  ]
+end
+
+; load csv file with points (id,x,y,z)
+to load-csv-file-common [obj-file auto-world-resize]
+  set vertices []
+  set vertices-n []
+  set vertices-t []
+  set vertices-color []
+  set faces []
+  set faces-vn []
+  set faces-vt []
+  let split-str " "
+  let v-count 0
+
+    set max_x -10000
+  set min_x 10000
+  set max_y -10000
+  set min_y 10000
+  set max_z -10000
+  set min_z 10000
+
+   ; open the csv file
+  file-open obj-file
+  let header csv:from-row file-read-line
+  while [ not file-at-end? ] [
+    let row csv:from-row file-read-line
+    ifelse v-count mod sample-rate != 0 [ ; use a point per sample-rate
+      ; get a point per the value of sample-rate points
+    ]
+    [
+    ; print(row)
+    ; read points (x,y,z)
+    if length row = 4 [
+    let x item 1 row * scale + offset-x
+    let y item 2 row * scale + offset-y
+    let z item 3 row * scale + offset-z
+    ; add vertices
+       set vertices lput (list x y z v-count) vertices
+
+          ; identify world size
+    if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+      ]
+      if length row = 7[
+            let x item 1 row * scale + offset-x
+    let y item 2 row * scale + offset-y
+    let z item 3 row * scale + offset-z
+    ; add vertices
+       set vertices lput (list x y z v-count) vertices
+
+        let r item 4 row
+        let g item 5 row
+        let b item 6 row
+        set vertices-color lput (list r g b) vertices-color
+
+          ; identify world size
+    if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+      ]
+
+            if length row = 6[
+            let x item 0 row * scale + offset-x
+    let y item 1 row * scale + offset-y
+    let z item 2 row * scale + offset-z
+    ; add vertices
+       set vertices lput (list x y z v-count) vertices
+
+        let r item 3 row
+        let g item 4 row
+        let b item 5 row
+        set vertices-color lput (list r g b) vertices-color
+
+          ; identify world size
+    if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+      ]
+
+
+
+
+    ]
+
+    set v-count v-count + 1
+
+  ]
+  file-close
+
+
+
+  print (word "vertices: " length vertices ", faces: " length faces)
+  print (word "faces-vn: " length faces-vn ", faces-vt: " length faces-vt)
+
+
+   if auto-world-resize = true [
+       if min_x > 0 [set min_x 0]
+    if max_x < 0 [set max_x 0]
+    if min_y > 0 [set min_y 0]
+    if max_y < 0 [set max_y 0]
+    if min_z > 0 [set min_z 0]
+    if max_z < 0 [set max_z 0]
+
+       print "World Size:"
+  print (word "x range: ["   min_x "," max_x "]")
+  print (word "y range: ["   min_y "," max_y "]")
+  print (word "z range: ["   min_z "," max_z "]")
+
+    set world-min-x int (min_x * size-scale)
+    set world-max-x int  (max_x  *  size-scale )
+    set world-min-y int (min_y *  size-scale )
+    set world-max-y int (max_y  *  size-scale)
+    set world-min-z int (min_z *  size-scale )
+    set world-max-z int (max_z *  size-scale )
+
+
+     ifelse world-max-x > 60 or world-max-y > 60 or world-max-z > 60 or world-min-x < -60 or world-min-y < -60 or world-min-z < -60  [
+      user-message "world size may be too large? We have stopped resizing world size. you can manually set the world size!"
+    ][
+       resize-world world-min-x world-max-x  world-min-y  world-max-y    world-min-z   world-max-z
+    ]
+  ]
+
+end
+
+; load .ply 3D model file
+to load-ply-file-common [obj-file auto-world-resize]
+  ; set obj-file "models/teapot.off"
+  set vertices []
+  set vertices-n []
+  set vertices-t []
+  set vertices-color []
+  set faces []
+  set faces-vn []
+  set faces-vt []
+  let split-str " "
+
+  set max_x -10000
+  set min_x 10000
+  set max_y -10000
+  set min_y 10000
+  set max_z -10000
+  set min_z 10000
+
+  print obj-file
+  file-open obj-file
+  let line ""
+  let num_vertex 0
+  let num_face 0
+  let num_edge 0
+  ; file-close
+  set line file-read-line
+  while [line != "end_header"  and not file-at-end?][
+
+    let ls (csv:from-row line split-str)
+    if item 0 ls = "element" [
+      if item 1 ls = "vertex" [ set num_vertex item 2 ls ]
+      if item 1 ls = "face" [set num_face item 2 ls ]
+      if item 1 ls = "edge" [set num_edge item 2 ls ]
+
+    ]
+    set line file-read-line
+  ]
+
+  let v-count 0
+  while [v-count < num_vertex]
+  [
+     set line file-read-line
+    ; print(line)
+     let ls (csv:from-row line split-str)
+     if length ls = 3 [
+      let x item 0 ls
+      let y item 1 ls
+      let z item 2 ls
+
+        ifelse v-count mod sample-rate != 0 [ ; use a point per sample-rate
+
+    ][
+         set vertices lput (list x y z v-count) vertices
+      ]
+
+         ; identify world size
+    if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+    ]
+    if length ls = 6 [
+           let x item 0 ls * scale + offset-x
+      let y item 1 ls * scale + offset-x
+      let z item 2 ls * scale + offset-x
+           let r item 3 ls
+      let g item 4 ls
+      let b item 5 ls
+         ifelse v-count mod sample-rate != 0 [ ; use a point per sample-rate
+
+    ][
+          set vertices lput (list x y z v-count) vertices
+          set vertices-color lput (list r g b v-count) vertices-color
+      ]
+
+              ; detect world size
+     if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+    ]
+
+
+    tick
+    set v-count v-count + 1
+
+  ]
+  set v-count 0
+  while [ v-count < num_face][
+    set line file-read-line
+    ; print(line)
+    let ls (csv:from-row line split-str)
+    let i 1
+    let tris []
+    while [i < length ls - 2][
+      let p1 item 1 ls
+      let p2 item (i + 1) ls
+      let p3 item (i + 2) ls
+
+      let tri (list p1 p2 p3)
+      ; set tris lput tri tris
+      set faces lput tri faces
+      set i i + 1
+     ; print tri
+    ]
+
+   set v-count v-count + 1
+  ]
+
+
+  print (word "vertices: " length vertices ", faces: " length faces)
+  print (word "faces-vn: " length faces-vn ", faces-vt: " length faces-vt)
+
+  ; print (word "stat: " num_vertex "," num_face "," num_edge)
+
+  file-close
+
+    if auto-world-resize = true [
+       if min_x > 0 [set min_x 0]
+    if max_x < 0 [set max_x 0]
+    if min_y > 0 [set min_y 0]
+    if max_y < 0 [set max_y 0]
+    if min_z > 0 [set min_z 0]
+    if max_z < 0 [set max_z 0]
+
+       print "World Size:"
+  print (word "x range: ["   min_x "," max_x "]")
+  print (word "y range: ["   min_y "," max_y "]")
+  print (word "z range: ["   min_z "," max_z "]")
+
+    set world-min-x int (min_x * size-scale)
+    set world-max-x int  (max_x  *  size-scale )
+    set world-min-y int (min_y *  size-scale )
+    set world-max-y int (max_y  *  size-scale)
+    set world-min-z int (min_z *  size-scale )
+    set world-max-z int (max_z *  size-scale )
+
+
+     ifelse world-max-x > 60 or world-max-y > 60 or world-max-z > 60 or world-min-x < -60 or world-min-y < -60 or world-min-z < -60  [
+      user-message "world size may be too large? We have stopped resizing world size. you can manually set the world size!"
+    ][
+       resize-world world-min-x world-max-x  world-min-y  world-max-y    world-min-z   world-max-z
+    ]
+  ]
+
+end
+
+; load .off 3D model file
+to load-off-file-common [obj-file auto-world-resize]
+
+  ; set obj-file "models/teapot.off"
+  set vertices []
+  set vertices-n []
+  set vertices-t []
+  set vertices-color []
+  set faces []
+  set faces-vn []
+  set faces-vt []
+  let split-str " "
+
+  file-open obj-file
+  print obj-file
+
+  set max_x -10000
+  set min_x 10000
+  set max_y -10000
+  set min_y 10000
+  set max_z -10000
+  set min_z 10000
+
+  let v-count 0
+  let file-flag file-read-line
+  print file-flag
+  let num-str file-read-line
+  let nums (csv:from-row num-str split-str)
+  let num-vertices item 0 nums
+  let num-faces item 1 nums
+  let num-edges item 2 nums
+
+  let line-num 0
+
+  while [line-num < num-vertices] [
+     let line file-read-line
+    let ls (csv:from-row line split-str)
+     let x (item 0 ls) * scale + offset-x
+       let y (item 1 ls) * scale + offset-y
+       let z (item 2 ls) * scale + offset-z
+
+    ifelse v-count mod sample-rate != 0 [
+    ;  set vertices lput [] vertices
+    ][
+      set vertices lput (list x y z v-count) vertices
+
+    ]
+     set v-count v-count + 1
+
+     set line-num line-num + 1
+
+          ; detect world size
+     if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+tick
+
+  ]
+
+  set line-num 0
+  while [line-num < num-faces]
+  [
+      let line file-read-line
+       let ls (csv:from-row line split-str)
+     let x (item 1 ls)
+       let y (item 2 ls)
+       let z (item 3 ls)
+      set faces lput (list x y z) faces
+    set line-num line-num + 1
+  ]
+
+ print (word "vertices: " length vertices ", faces: " length faces)
+ file-close
+
+
+
+
+  print (word "vertices: " length vertices ", faces: " length faces)
+  print (word "faces-vn: " length faces-vn ", faces-vt: " length faces-vt)
+
+ if auto-world-resize = true [
+       if min_x > 0 [set min_x 0]
+    if max_x < 0 [set max_x 0]
+    if min_y > 0 [set min_y 0]
+    if max_y < 0 [set max_y 0]
+    if min_z > 0 [set min_z 0]
+    if max_z < 0 [set max_z 0]
+
+       print "World Size:"
+  print (word "x range: ["   min_x "," max_x "]")
+  print (word "y range: ["   min_y "," max_y "]")
+  print (word "z range: ["   min_z "," max_z "]")
+
+    set world-min-x int (min_x * size-scale)
+    set world-max-x int  (max_x  *  size-scale )
+    set world-min-y int (min_y *  size-scale )
+    set world-max-y int (max_y  *  size-scale)
+    set world-min-z int (min_z *  size-scale )
+    set world-max-z int (max_z *  size-scale )
+
+
+     ifelse world-max-x > 60 or world-max-y > 60 or world-max-z > 60 or world-min-x < -60 or world-min-y < -60 or world-min-z < -60  [
+      user-message "world size may be too large? We have stopped resizing world size. you can manually set the world size!"
+    ][
+       resize-world world-min-x world-max-x  world-min-y  world-max-y    world-min-z   world-max-z
+    ]
+  ]
+
+
+end
+
+to load-obj-file
+  reset-ticks
+  if member? ".obj"  input-selected-path [
+    load-obj-file-common  input-selected-path auto-resize-world
+  ]
+  if member? ".off"  input-selected-path  [
+    load-off-file-common  input-selected-path auto-resize-world
+  ]
+    if member? ".csv"  input-selected-path [
+    load-csv-file-common  input-selected-path auto-resize-world
+  ]
+   if member? ".ply"  input-selected-path [
+    load-ply-file-common  input-selected-path auto-resize-world
+  ]
+end
+
+
+to load-model-auto [model-path my-world-min-x my-world-max-x  my-world-min-y my-world-max-y my-world-min-z my-world-max-z]
+
+  clear-model
+
+  set world-min-x my-world-min-x
+  set world-min-y my-world-min-y
+  set world-min-z my-world-min-z
+
+   set world-max-x my-world-max-x
+  set world-max-y my-world-max-y
+  set world-max-z my-world-max-z
+
+  init-world
+
+  set input-selected-path model-path
+  set current-model-path model-path
+  if member? ".obj"  input-selected-path [
+    load-obj-file-common  input-selected-path false
+  ]
+  if member? ".off"  input-selected-path  [
+    load-off-file-common  input-selected-path false
+  ]
+    if member? ".csv"  input-selected-path [
+    load-csv-file-common  input-selected-path false
+  ]
+ if member? ".ply"  input-selected-path [
+    load-ply-file-common  input-selected-path false
+  ]
+   create-vertices
+
+end
+
+; load 3D obj file from local file system
+to load-obj-file-common [obj-file auto-world-resize]
+  ; let obj-file "models/teapot.obj"
+  let split-str " "
+  set vertices []
+  set vertices-n []
+  set vertices-t []
+  set vertices-color []
+  set faces []
+  set faces-vn []
+  set faces-vt []  set vertices []
+  set vertices-n []
+  set vertices-t []
+  set vertices-color []
+  set faces []
+  set faces-vn []
+  set faces-vt []
+
+  set max_x -10000
+  set min_x 10000
+  set max_y -10000
+  set min_y 10000
+  set max_z -10000
+  set min_z 10000
+  let v-count 0
+  file-open obj-file
+  while [not file-at-end?][
+    let line file-read-line
+    let test-line remove "" line
+
+    ; print line
+    let ls (csv:from-row line split-str)
+    if length ls >= 3 and (item 0 ls != "#") and test-line != "" [
+    ; print ls
+    let flag item 0 ls
+    if flag = "v" and length ls >= 4 [
+       let x (item 1 ls) * scale + offset-x
+       let y (item 2 ls) * scale + offset-y
+       let z (item 3 ls) * scale + offset-z
+
+     ifelse v-count mod sample-rate != 0 [
+     ; set vertices lput (list 0) vertices
+    ][
+      set vertices lput (list x y z v-count) vertices
+
+    ]
+        set v-count v-count + 1
+        ; detect world size
+     if x > max_x [ set max_x x]
+    if x < min_x [ set min_x x]
+    if y > max_y [ set max_y y]
+    if y < min_y [ set min_y y]
+    if z > max_z [ set max_z z]
+    if z < min_z [ set min_z z]
+
+    ]
+      if flag = "vn" and length ls >= 4 [
+       let x (item 1 ls)
+       let y (item 2 ls)
+       let z (item 3 ls)
+      set vertices-n lput (list x y z) vertices-n
+    ]
+
+    if flag = "f"[
+      let list-f []
+      let list-fvt []
+      let list-fvn []
+      let n length ls
+        ifelse member? "/" line [ ; contains vn, vt
+             let current-i 1
+        while [current-i < n ] [
+
+            let vs (csv:from-row (item current-i ls) "/")
+            if length vs >= 3 [
+            ; print(vs)
+            let fv item 0 vs
+            let fvn item 1 vs
+            let fvt item 2 vs
+             set list-f lput fv list-f
+             set list-fvn lput fvn list-fvn
+             set list-fvt lput fvt list-fvt
+
+            ]
+            set current-i current-i + 1
+          ]
+           set faces lput list-f faces
+           set faces-vn lput list-fvn faces-vn
+          set faces-vt lput list-fvt faces-vt
+
+          ]
+
+          [ ; only vertice index
+      let current-i 1
+        while [current-i < n ] [
+
+        let f item current-i ls
+
+        set list-f lput f list-f
+            set current-i current-i + 1
+          ]
+
+
+      set faces lput list-f faces
+        ]
+    ]
+    ]
+    tick
+  ]
+  file-close
+
+
+
+  print (word "vertices: " length vertices ", faces: " length faces)
+  print (word "faces-vn: " length faces-vn ", faces-vt: " length faces-vt)
+
+ if auto-world-resize = true [
+       if min_x > 0 [set min_x 0]
+    if max_x < 0 [set max_x 0]
+    if min_y > 0 [set min_y 0]
+    if max_y < 0 [set max_y 0]
+    if min_z > 0 [set min_z 0]
+    if max_z < 0 [set max_z 0]
+
+       print "World Size:"
+  print (word "x range: ["   min_x "," max_x "]")
+  print (word "y range: ["   min_y "," max_y "]")
+  print (word "z range: ["   min_z "," max_z "]")
+
+    set world-min-x int (min_x * size-scale)
+    set world-max-x int  (max_x  *  size-scale )
+    set world-min-y int (min_y *  size-scale )
+    set world-max-y int (max_y  *  size-scale)
+    set world-min-z int (min_z *  size-scale )
+    set world-max-z int (max_z *  size-scale )
+
+
+     ifelse world-max-x > 60 or world-max-y > 60 or world-max-z > 60 or world-min-x < -60 or world-min-y < -60 or world-min-z < -60  [
+      user-message "world size may be too large? We have stopped resizing world size. you can manually set the world size!"
+    ][
+       resize-world world-min-x world-max-x  world-min-y  world-max-y    world-min-z   world-max-z
+    ]
+  ]
+
+
+end
+
+; create vertices of the 3D model into agent-based model
+to create-vertices
+
+  clear-model
+
+  let n length vertices
+  let i 0
+  while [i < n] [
+   let vertice item i vertices
+   if length vertice = 4[
+      ;
+      ; print(vertice)
+      let mycolor blue
+      if length vertices-color != 0 and i <= n - 1[
+        let c item i vertices-color
+        let r item 0 c
+        let g item 1 c
+        let b item 2 c
+        set mycolor (list r g b)
+      ]
+     ; print (word mycolor)
+   create-turtles 1 [
+     set shape "dot"
+       set color mycolor
+        let x item 0 vertice
+        let y item 1 vertice
+        let z item 2 vertice
+
+      setxyz x y z
+      set size turtle-size
+      set vid (item 3 vertice)
+      set object "model"
+     ]
+    ]
+   set i i + 1
+  ]
+
+end
+
+to draw-triangle [p1 p2 p3 face-id]
+  ; let p1 (list 1 0 1)
+  ; let p2 (list 2 1 3)
+  ; let p3 (list 4 2 3)
+
+
+  ask p1[
+    create-link-with p2 [
+      set hidden? hide-faces
+      set fid face-id
+    ]
+
+
+  ]
+
+  ask p2[
+    create-link-with p3[
+      set hidden? hide-faces
+       set fid face-id
+    ]
+  ]
+
+  ask p3[
+    create-link-with p1[
+      set hidden? hide-faces
+       set fid face-id
+    ]
+  ]
+end
+
+to init-world
+   resize-world world-min-x  world-max-x world-min-y  world-max-y  world-min-z  world-max-z
+end
+
+to clear-model
+  ask turtles with [object = "model" ] [die]
+  ask links [die]
+end
+
+; create links between agents
+to create-faces
+  let n length faces
+  let i 0
+  while [i < n] [
+    let f item i faces
+    ; print f
+    let p1 one-of (turtles with [object = "model" and vid = item 0 f])
+    let p2 one-of (turtles with [object = "model" and vid = item 1 f])
+    let p3 one-of (turtles with [object = "model" and vid = item 2 f])
+    ifelse p1 != nobody and p2 != nobody and p3 != nobody [
+      draw-triangle p1 p2 p3 i
+
+    ][
+      ; print (word f)
+    ]
+    set i i + 1
+  ]
+end
+
+to remove-faces
+  ask links [
+   die
+  ]
+end
+
+; A sample NetLogo procedure to shows the usage of our toolkit when the 3D model is imported.
+to go
+  set current-agent one-of turtles with [object = "model"]
+  let related-turtles nobody
+  ask current-agent[
+    set color red
+    set related-turtles other turtles with [link-neighbor? myself]
+    ask related-turtles [
+     set color green
+    ]
+
+  ]
+  set current-agent one-of related-turtles
+
+  if count turtles with  [object = "model"] = 0 [stop]
+  tick
+end
+
+
+to load-model-male
+  set scale 10
+  set sample-rate 30
+  set size-scale 1.5
+   load-model-auto "models/male.csv" -22 22 -66 17 -5 9
+
+end
+
+
+to load-model-head
+  set scale 10
+  set size-scale 1.5
+  set sample-rate 10
+  load-model-auto "models/head.csv"  -4 4 0 19 -3 8
+
+end
+
+to load-model-hand
+  set scale 0.3
+  set size-scale 1.5
+  set sample-rate 10
+  load-model-auto "models/hand.csv" -43 27 -34 47 -1 20
+
+end
+
+to load-model-arm
+  set scale 0.3
+  set size-scale 1.5
+  set sample-rate 2
+  load-model-auto "models/arm.csv" -18 55 -24 24 -53 109
+
+end
+
+to load-model-skeleton
+  set scale 0.05
+  set size-scale 1.5
+  set sample-rate 50
+  load-model-auto "models/human-skeleton.csv" -11 15 -22 22 -60 64
+
+end
+
+to load-model-leg
+  set scale 0.8
+  set size-scale 1.5
+  set sample-rate 1
+  load-model-auto "models/leg.csv" -9 12 0 118 -17 18
+
+end
+
+to zero-offsets
+  set offset-x 0
+  set offset-y 0
+  set offset-z 0
+end
+@#$#@#$#@
+GRAPHICS-WINDOW
+0
+0
+21
+22
+-1
+-1
+13.0
+1
+10
+1
+1
+1
+0
+1
+1
+1
+0
+0
+0
+0
+0
+0
+1
+0
+1
+ticks
+30.0
+
+BUTTON
+51
+50
+117
+83
+NIL
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+143
+50
+206
+83
+NIL
+go
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+50
+122
+171
+155
+1.Load model
+load-obj-file
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+183
+121
+332
+154
+2.Show vertices
+create-vertices
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+335
+52
+449
+85
+remove-model
+clear-model
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+492
+121
+664
+154
+scale
+scale
+0.01
+10
+0.2
+0.01
+1
+NIL
+HORIZONTAL
+
+BUTTON
+346
+121
+481
+154
+3. Show faces
+create-faces
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+226
+51
+320
+84
+clear-all
+clear-all\nreset-ticks
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+674
+122
+846
+155
+size-scale
+size-scale
+0
+5
+1.2
+0.1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+52
+253
+224
+286
+world-min-x
+world-min-x
+-60
+0
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+53
+297
+225
+330
+world-max-x
+world-max-x
+0
+60
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+255
+253
+427
+286
+world-min-y
+world-min-y
+-60
+0
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+256
+297
+428
+330
+world-max-y
+world-max-y
+0
+60
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+456
+254
+628
+287
+world-min-z
+world-min-z
+-60
+0
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+457
+298
+629
+331
+world-max-z
+world-max-z
+0
+60
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+47
+22
+197
+40
+Main functions: 
+12
+0.0
+1
+
+TEXTBOX
+49
+97
+199
+115
+Model loading functions: 
+12
+0.0
+1
+
+TEXTBOX
+58
+224
+282
+250
+NetLogo world resizing: 
+12
+0.0
+1
+
+BUTTON
+661
+256
+762
+289
+NIL
+init-world
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SWITCH
+871
+125
+998
+158
+hide-faces
+hide-faces
+1
+1
+-1000
+
+BUTTON
+465
+52
+579
+85
+NIL
+select-model
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+INPUTBOX
+597
+10
+996
+87
+input-selected-path
+D:\\UIBE科研\\国自科青年\\NetLogo\\论文2\\medical-education-project\\examples-med3dsim\\image_processing\\datasets\\Male\\abdomen2.csv
+1
+0
+String
+
+SLIDER
+495
+177
+667
+210
+sample-rate
+sample-rate
+1
+200
+11.0
+1
+1
+NIL
+HORIZONTAL
+
+BUTTON
+348
+175
+484
+208
+4.Remove faces
+remove-faces
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+TEXTBOX
+62
+353
+212
+371
+Model libraries: 
+12
+0.0
+1
+
+BUTTON
+61
+384
+203
+417
+NIL
+load-model-male
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+237
+385
+372
+418
+NIL
+load-model-head
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+405
+387
+533
+420
+NIL
+load-model-arm
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+563
+383
+691
+416
+NIL
+load-model-leg
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+714
+383
+877
+416
+NIL
+load-model-skeleton
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+898
+383
+1033
+416
+NIL
+load-model-hand
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+1095
+112
+1267
+145
+offset-x
+offset-x
+-100
+100
+-50.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+1098
+165
+1270
+198
+offset-y
+offset-y
+-100
+100
+-28.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+1099
+213
+1271
+246
+offset-z
+offset-z
+-100
+100
+-22.0
+1
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+1099
+77
+1321
+103
+Offset values assigned to x,y,and z: 
+12
+0.0
+1
+
+BUTTON
+1109
+266
+1223
+299
+NIL
+zero-offsets
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SWITCH
+48
+174
+223
+207
+auto-resize-world
+auto-resize-world
+0
+1
+-1000
+
+SLIDER
+229
+174
+343
+207
+turtle-size
+turtle-size
+0.1
+5
+1.1
+1
+1
+NIL
+HORIZONTAL
+
+MONITOR
+697
+178
+793
+223
+No. Vertices
+length vertices
+17
+1
+11
+
+@#$#@#$#@
+## WHAT IS IT?
+
+The toolkit facilitates loading 3D models with various formats in NetLogo 3D.  
+
+Currently it supports .obj, .off and .csv (point cloud) formats.
+
+
+
+## HOW IT WORKS
+
+We support various 3D model file formats to import in the environment. 
+
+
+The .csv file follows the format like:
+id,x,y,z
+0,1,1,0
+1,0,1,1
+...
+1111,2,2,3
+
+## HOW TO USE IT
+
+Step 0: prepare for several .obj, .csv or .off 3D model files.
+Step 1: select model
+Step 2: load model
+Step 3: show vertices
+Step 4: show/remove faces
+Step 5: run a simple sample simulation procedure that randomly visits neighbor agent sets in the 3D model for demonstration. 
+
+## EXTENDING THE MODEL
+
+This is a part of the NetLogo model in our proposed MedSim3D framework. 
+GitHub project: https://github.com/dhchenx/MedSim3D
+@#$#@#$#@
+default
+true
+0
+Polygon -7500403 true true 150 5 40 250 150 205 260 250
+
+airplane
+true
+0
+Polygon -7500403 true true 150 0 135 15 120 60 120 105 15 165 15 195 120 180 135 240 105 270 120 285 150 270 180 285 210 270 165 240 180 180 285 195 285 165 180 105 180 60 165 15
+
+arrow
+true
+0
+Polygon -7500403 true true 150 0 0 150 105 150 105 293 195 293 195 150 300 150
+
+box
+false
+0
+Polygon -7500403 true true 150 285 285 225 285 75 150 135
+Polygon -7500403 true true 150 135 15 75 150 15 285 75
+Polygon -7500403 true true 15 75 15 225 150 285 150 135
+Line -16777216 false 150 285 150 135
+Line -16777216 false 150 135 15 75
+Line -16777216 false 150 135 285 75
+
+bug
+true
+0
+Circle -7500403 true true 96 182 108
+Circle -7500403 true true 110 127 80
+Circle -7500403 true true 110 75 80
+Line -7500403 true 150 100 80 30
+Line -7500403 true 150 100 220 30
+
+butterfly
+true
+0
+Polygon -7500403 true true 150 165 209 199 225 225 225 255 195 270 165 255 150 240
+Polygon -7500403 true true 150 165 89 198 75 225 75 255 105 270 135 255 150 240
+Polygon -7500403 true true 139 148 100 105 55 90 25 90 10 105 10 135 25 180 40 195 85 194 139 163
+Polygon -7500403 true true 162 150 200 105 245 90 275 90 290 105 290 135 275 180 260 195 215 195 162 165
+Polygon -16777216 true false 150 255 135 225 120 150 135 120 150 105 165 120 180 150 165 225
+Circle -16777216 true false 135 90 30
+Line -16777216 false 150 105 195 60
+Line -16777216 false 150 105 105 60
+
+car
+false
+0
+Polygon -7500403 true true 300 180 279 164 261 144 240 135 226 132 213 106 203 84 185 63 159 50 135 50 75 60 0 150 0 165 0 225 300 225 300 180
+Circle -16777216 true false 180 180 90
+Circle -16777216 true false 30 180 90
+Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
+Circle -7500403 true true 47 195 58
+Circle -7500403 true true 195 195 58
+
+circle
+false
+0
+Circle -7500403 true true 0 0 300
+
+circle 2
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+
+cow
+false
+0
+Polygon -7500403 true true 200 193 197 249 179 249 177 196 166 187 140 189 93 191 78 179 72 211 49 209 48 181 37 149 25 120 25 89 45 72 103 84 179 75 198 76 252 64 272 81 293 103 285 121 255 121 242 118 224 167
+Polygon -7500403 true true 73 210 86 251 62 249 48 208
+Polygon -7500403 true true 25 114 16 195 9 204 23 213 25 200 39 123
+
+cylinder
+false
+0
+Circle -7500403 true true 0 0 300
+
+dot
+false
+0
+Circle -7500403 true true 90 90 120
+
+face happy
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 255 90 239 62 213 47 191 67 179 90 203 109 218 150 225 192 218 210 203 227 181 251 194 236 217 212 240
+
+face neutral
+false
+0
+Circle -7500403 true true 8 7 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Rectangle -16777216 true false 60 195 240 225
+
+face sad
+false
+0
+Circle -7500403 true true 8 8 285
+Circle -16777216 true false 60 75 60
+Circle -16777216 true false 180 75 60
+Polygon -16777216 true false 150 168 90 184 62 210 47 232 67 244 90 220 109 205 150 198 192 205 210 220 227 242 251 229 236 206 212 183
+
+fish
+false
+0
+Polygon -1 true false 44 131 21 87 15 86 0 120 15 150 0 180 13 214 20 212 45 166
+Polygon -1 true false 135 195 119 235 95 218 76 210 46 204 60 165
+Polygon -1 true false 75 45 83 77 71 103 86 114 166 78 135 60
+Polygon -7500403 true true 30 136 151 77 226 81 280 119 292 146 292 160 287 170 270 195 195 210 151 212 30 166
+Circle -16777216 true false 215 106 30
+
+flag
+false
+0
+Rectangle -7500403 true true 60 15 75 300
+Polygon -7500403 true true 90 150 270 90 90 30
+Line -7500403 true 75 135 90 135
+Line -7500403 true 75 45 90 45
+
+flower
+false
+0
+Polygon -10899396 true false 135 120 165 165 180 210 180 240 150 300 165 300 195 240 195 195 165 135
+Circle -7500403 true true 85 132 38
+Circle -7500403 true true 130 147 38
+Circle -7500403 true true 192 85 38
+Circle -7500403 true true 85 40 38
+Circle -7500403 true true 177 40 38
+Circle -7500403 true true 177 132 38
+Circle -7500403 true true 70 85 38
+Circle -7500403 true true 130 25 38
+Circle -7500403 true true 96 51 108
+Circle -16777216 true false 113 68 74
+Polygon -10899396 true false 189 233 219 188 249 173 279 188 234 218
+Polygon -10899396 true false 180 255 150 210 105 210 75 240 135 240
+
+house
+false
+0
+Rectangle -7500403 true true 45 120 255 285
+Rectangle -16777216 true false 120 210 180 285
+Polygon -7500403 true true 15 120 150 15 285 120
+Line -16777216 false 30 120 270 120
+
+leaf
+false
+0
+Polygon -7500403 true true 150 210 135 195 120 210 60 210 30 195 60 180 60 165 15 135 30 120 15 105 40 104 45 90 60 90 90 105 105 120 120 120 105 60 120 60 135 30 150 15 165 30 180 60 195 60 180 120 195 120 210 105 240 90 255 90 263 104 285 105 270 120 285 135 240 165 240 180 270 195 240 210 180 210 165 195
+Polygon -7500403 true true 135 195 135 240 120 255 105 255 105 285 135 285 165 240 165 195
+
+line
+true
+0
+Line -7500403 true 150 0 150 300
+
+line half
+true
+0
+Line -7500403 true 150 0 150 150
+
+pentagon
+false
+0
+Polygon -7500403 true true 150 15 15 120 60 285 240 285 285 120
+
+person
+false
+0
+Circle -7500403 true true 110 5 80
+Polygon -7500403 true true 105 90 120 195 90 285 105 300 135 300 150 225 165 300 195 300 210 285 180 195 195 90
+Rectangle -7500403 true true 127 79 172 94
+Polygon -7500403 true true 195 90 240 150 225 180 165 105
+Polygon -7500403 true true 105 90 60 150 75 180 135 105
+
+plant
+false
+0
+Rectangle -7500403 true true 135 90 165 300
+Polygon -7500403 true true 135 255 90 210 45 195 75 255 135 285
+Polygon -7500403 true true 165 255 210 210 255 195 225 255 165 285
+Polygon -7500403 true true 135 180 90 135 45 120 75 180 135 210
+Polygon -7500403 true true 165 180 165 210 225 180 255 120 210 135
+Polygon -7500403 true true 135 105 90 60 45 45 75 105 135 135
+Polygon -7500403 true true 165 105 165 135 225 105 255 45 210 60
+Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
+
+sheep
+false
+15
+Circle -1 true true 203 65 88
+Circle -1 true true 70 65 162
+Circle -1 true true 150 105 120
+Polygon -7500403 true false 218 120 240 165 255 165 278 120
+Circle -7500403 true false 214 72 67
+Rectangle -1 true true 164 223 179 298
+Polygon -1 true true 45 285 30 285 30 240 15 195 45 210
+Circle -1 true true 3 83 150
+Rectangle -1 true true 65 221 80 296
+Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
+Polygon -7500403 true false 276 85 285 105 302 99 294 83
+Polygon -7500403 true false 219 85 210 105 193 99 201 83
+
+square
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+
+square 2
+false
+0
+Rectangle -7500403 true true 30 30 270 270
+Rectangle -16777216 true false 60 60 240 240
+
+star
+false
+0
+Polygon -7500403 true true 151 1 185 108 298 108 207 175 242 282 151 216 59 282 94 175 3 108 116 108
+
+target
+false
+0
+Circle -7500403 true true 0 0 300
+Circle -16777216 true false 30 30 240
+Circle -7500403 true true 60 60 180
+Circle -16777216 true false 90 90 120
+Circle -7500403 true true 120 120 60
+
+tree
+false
+0
+Circle -7500403 true true 118 3 94
+Rectangle -6459832 true false 120 195 180 300
+Circle -7500403 true true 65 21 108
+Circle -7500403 true true 116 41 127
+Circle -7500403 true true 45 90 120
+Circle -7500403 true true 104 74 152
+
+triangle
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+
+triangle 2
+false
+0
+Polygon -7500403 true true 150 30 15 255 285 255
+Polygon -16777216 true false 151 99 225 223 75 224
+
+truck
+false
+0
+Rectangle -7500403 true true 4 45 195 187
+Polygon -7500403 true true 296 193 296 150 259 134 244 104 208 104 207 194
+Rectangle -1 true false 195 60 195 105
+Polygon -16777216 true false 238 112 252 141 219 141 218 112
+Circle -16777216 true false 234 174 42
+Rectangle -7500403 true true 181 185 214 194
+Circle -16777216 true false 144 174 42
+Circle -16777216 true false 24 174 42
+Circle -7500403 false true 24 174 42
+Circle -7500403 false true 144 174 42
+Circle -7500403 false true 234 174 42
+
+turtle
+true
+0
+Polygon -10899396 true false 215 204 240 233 246 254 228 266 215 252 193 210
+Polygon -10899396 true false 195 90 225 75 245 75 260 89 269 108 261 124 240 105 225 105 210 105
+Polygon -10899396 true false 105 90 75 75 55 75 40 89 31 108 39 124 60 105 75 105 90 105
+Polygon -10899396 true false 132 85 134 64 107 51 108 17 150 2 192 18 192 52 169 65 172 87
+Polygon -10899396 true false 85 204 60 233 54 254 72 266 85 252 107 210
+Polygon -7500403 true true 119 75 179 75 209 101 224 135 220 225 175 261 128 261 81 224 74 135 88 99
+
+wheel
+false
+0
+Circle -7500403 true true 3 3 294
+Circle -16777216 true false 30 30 240
+Line -7500403 true 150 285 150 15
+Line -7500403 true 15 150 285 150
+Circle -7500403 true true 120 120 60
+Line -7500403 true 216 40 79 269
+Line -7500403 true 40 84 269 221
+Line -7500403 true 40 216 269 79
+Line -7500403 true 84 40 221 269
+
+wolf
+false
+0
+Polygon -16777216 true false 253 133 245 131 245 133
+Polygon -7500403 true true 2 194 13 197 30 191 38 193 38 205 20 226 20 257 27 265 38 266 40 260 31 253 31 230 60 206 68 198 75 209 66 228 65 243 82 261 84 268 100 267 103 261 77 239 79 231 100 207 98 196 119 201 143 202 160 195 166 210 172 213 173 238 167 251 160 248 154 265 169 264 178 247 186 240 198 260 200 271 217 271 219 262 207 258 195 230 192 198 210 184 227 164 242 144 259 145 284 151 277 141 293 140 299 134 297 127 273 119 270 105
+Polygon -7500403 true true -1 195 14 180 36 166 40 153 53 140 82 131 134 133 159 126 188 115 227 108 236 102 238 98 268 86 269 92 281 87 269 103 269 113
+
+x
+false
+0
+Polygon -7500403 true true 270 75 225 30 30 225 75 270
+Polygon -7500403 true true 30 75 75 30 270 225 225 270
+@#$#@#$#@
+NetLogo 3D 6.2.1
+@#$#@#$#@
+need-to-manually-make-preview-for-this-model
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+@#$#@#$#@
+default
+0.0
+-0.2 0 0.0 1.0
+0.0 1 1.0 0.0
+0.2 0 0.0 1.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+@#$#@#$#@
+0
+@#$#@#$#@
